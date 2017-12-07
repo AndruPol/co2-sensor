@@ -1,3 +1,4 @@
+## CO2, temperature, humidity sensor
 CO2, temperature, humidity sensor with OLED on STM32F103 w ChibiOS/RT
 
 * Display CO2 (MH-Z19), temperature, humidity (DHT22) values on OLED LCD 0.96" 128x64 SSD1306 SPI version
@@ -34,4 +35,21 @@ Board LED
 PA2	GPIO_Output	
 
 CR2032 battery connected to VBAT
+```
+Command list:
+
+```
+screen  - LCD on|off
+beep    - buzzer alarm on|off
+out     - send sensor values to PC on|off
+sysled  - board LED on|off
+led     - sensors status LED on|off
+co2_en  - CO2 sensor polling on|off
+temp_en - temperature polling on|off
+hum_en  - humidity polling on|off
+co2     - CO2 warning/critical set (example: c02 warn_val crit_val)
+templow - temperature low warning/critical set (example: templow warn_val crit_val)
+temphigh - temperature high warning/critical set (example: temphigh warn_val crit_val)
+humlow  - humidity low warning/critical set (example: humlow warn_val crit_val)
+humhigh - humidity high warning/critical set (example: humhigh warn_val crit_val)
 ```
