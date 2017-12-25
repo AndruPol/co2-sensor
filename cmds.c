@@ -22,7 +22,7 @@
 
 void cmd_reboot(BaseSequentialStream *chp, int argc, char *argv[]);
 void cmd_screen(BaseSequentialStream *chp, int argc, char *argv[]);
-void cmd_beep(BaseSequentialStream *chp, int argc, char *argv[]);
+void cmd_buz(BaseSequentialStream *chp, int argc, char *argv[]);
 void cmd_out(BaseSequentialStream *chp, int argc, char *argv[]);
 void cmd_sysled(BaseSequentialStream *chp, int argc, char *argv[]);
 void cmd_led(BaseSequentialStream *chp, int argc, char *argv[]);
@@ -34,13 +34,15 @@ void cmd_templow(BaseSequentialStream *chp, int argc, char *argv[]);
 void cmd_temphigh(BaseSequentialStream *chp, int argc, char *argv[]);
 void cmd_humlow(BaseSequentialStream *chp, int argc, char *argv[]);
 void cmd_humhigh(BaseSequentialStream *chp, int argc, char *argv[]);
+void cmd_buzint(BaseSequentialStream *chp, int argc, char *argv[]);
+void cmd_outint(BaseSequentialStream *chp, int argc, char *argv[]);
 
 const ShellCommand commands[] = {
 #if REBOOT
   {"reboot", cmd_reboot},
 #endif
   {"screen", cmd_screen},
-  {"beep", cmd_beep},
+  {"buz", cmd_buz},
   {"out", cmd_out},
   {"sysled", cmd_sysled},
   {"led", cmd_led},
@@ -52,6 +54,8 @@ const ShellCommand commands[] = {
   {"temphigh", cmd_temphigh},
   {"humlow", cmd_humlow},
   {"humhigh", cmd_humhigh},
+  {"buzint", cmd_buzint},
+  {"outint", cmd_outint},
   {NULL, NULL}
 };
 
@@ -90,20 +94,20 @@ void cmd_screen(BaseSequentialStream *chp, int argc, char *argv[]) {
 }
 
 /*
- * cmd beep | beep 0|1
+ * cmd buz | buz 0|1
 */
-void cmd_beep(BaseSequentialStream *chp, int argc, char *argv[]) {
+void cmd_buz(BaseSequentialStream *chp, int argc, char *argv[]) {
 	(void)argv;
 	(void)chp;
 
 	if (argc == 0) {
-		chprintf(chp, "Usage: beep [0|1]\r\n");
-		chprintf(chp, "beep: %d\r\n", system_config.config.data.buzzer_en);
+		chprintf(chp, "Usage: buz [0|1]\r\n");
+		chprintf(chp, "buz: %d\r\n", system_config.config.data.buzzer_en);
 		return;
 	}
 	uint8_t p = atoi(argv[0]);
 	if (p > 1) {
-		chprintf(chp, "Usage: beep [0|1]\r\n");
+		chprintf(chp, "Usage: buz [0|1]\r\n");
 		return;
 	}
 	system_config.config.data.buzzer_en = 0;
@@ -370,6 +374,50 @@ void cmd_humhigh(BaseSequentialStream *chp, int argc, char *argv[]) {
 		system_config.humhigh.data.crit = c;
 		saveconfig();
 	}
+}
+
+/*
+ * cmd buzint | buzint N
+*/
+void cmd_buzint(BaseSequentialStream *chp, int argc, char *argv[]) {
+	(void)argv;
+	(void)chp;
+
+	if (argc == 0) {
+		chprintf(chp, "Usage: buzint N (N=1..255)\r\n");
+		chprintf(chp, "buzint: %d\r\n", system_config.timeint.data.buzint);
+		return;
+	}
+	uint8_t p = atoi(argv[0]);
+	if (p == 0) {
+		chprintf(chp, "Usage: buzint N (N=1..255)\r\n");
+		return;
+	}
+	system_config.timeint.data.buzint = p;
+	saveconfig();
+	buzint = 1;
+}
+
+/*
+ * cmd outint | outint N
+*/
+void cmd_outint(BaseSequentialStream *chp, int argc, char *argv[]) {
+	(void)argv;
+	(void)chp;
+
+	if (argc == 0) {
+		chprintf(chp, "Usage: outint N (N=5..255)\r\n");
+		chprintf(chp, "outint: %d\r\n", system_config.timeint.data.outint);
+		return;
+	}
+	uint8_t p = atoi(argv[0]);
+	if (p < 5) {
+		chprintf(chp, "Usage: outint N (N=5..255)\r\n");
+		return;
+	}
+	system_config.timeint.data.outint = p;
+	saveconfig();
+	outint = 1;
 }
 
 /*

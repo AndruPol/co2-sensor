@@ -33,6 +33,8 @@ void defaultconfig(void) {
 	system_config.humlow.data.crit = HUMLOW_CRIT;
 	system_config.humhigh.data.warn = HUMHIGH_WARN;
 	system_config.humhigh.data.crit = HUMHIGH_CRIT;
+	system_config.timeint.data.outint = OUTPUT_INT;
+	system_config.timeint.data.buzint = BUZZER_INT;
 }
 
 bool readconfig(void) {
@@ -47,6 +49,7 @@ bool readconfig(void) {
     system_config.temphigh.raw = *(&backup_data->temphigh.data);
     system_config.humlow.raw = *(&backup_data->humlow.data);
     system_config.humhigh.raw = *(&backup_data->humhigh.data);
+    system_config.timeint.raw = *(&backup_data->timeint.data);
     return true;
 }
 
@@ -59,4 +62,5 @@ void saveconfig(void) {
     *(&backup_data->temphigh.data) = system_config.temphigh.raw;
     *(&backup_data->humlow.data) = system_config.humlow.raw;
     *(&backup_data->humhigh.data) = system_config.humhigh.raw;
+    *(&backup_data->timeint.data) = system_config.timeint.raw;
 }

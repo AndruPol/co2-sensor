@@ -40,7 +40,7 @@ Command list:
 
 ```
 screen  - LCD on|off
-beep    - buzzer alarm on|off
+buz     - buzzer alarm on|off
 out     - send sensor values to PC on|off
 sysled  - board LED on|off
 led     - sensors status LED on|off
@@ -52,4 +52,6 @@ templow - temperature low warning/critical set (example: templow warn_val crit_v
 temphigh - temperature high warning/critical set (example: temphigh warn_val crit_val)
 humlow  - humidity low warning/critical set (example: humlow warn_val crit_val)
 humhigh - humidity high warning/critical set (example: humhigh warn_val crit_val)
+buzint	- buzzer interval, sec
+outint	- send sensor values to PC interval, sec
 ```

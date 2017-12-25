@@ -17,11 +17,6 @@ typedef enum {
 		MHZ19_ERROR,
 } mhz19_error_t;
 
-typedef struct _mhz19_sensor mhz19_sensor_t;
-struct _mhz19_sensor {
-        mhz19_error_t state;   /* признак ошибки */
-        uint16_t co2; 		       /* значение CO2 */
-};
 
 #ifdef __cplusplus
 extern "C" {

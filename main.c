@@ -33,27 +33,28 @@
 
 #define LEDINT			MS2ST(500)
 #define LEDPRIO			(NORMALPRIO)
-static THD_WORKING_AREA(waLEDThread, 196);
+static THD_WORKING_AREA(waLEDThread, 164);
 
 #define SCANINT			MS2ST(5000)
 #define SCANPRIO		(NORMALPRIO)
-static THD_WORKING_AREA(waScanThread, 512);
+static THD_WORKING_AREA(waScanThread, 256);
 
 #define USB_WRITE_MS	100
 
+static binary_semaphore_t updsem;
 volatile backup_data_t *backup_data = (volatile backup_data_t *)(BKP_BASE + 0x0004);
 system_config_t system_config;
-dht_sensor_t dht;
-mhz19_sensor_t mhz19;
 delay_t mhz19_pwrup = {
 	.active = true,
 	.delay = MHZ19_PWRON
 };
 
 static state_t led = UNKNOWN;
-state_t co2_state = UNKNOWN;
-state_t temp_state = UNKNOWN;
-state_t hum_state = UNKNOWN;
+dht_sensor_t dht;
+mhz19_sensor_t mhz19;
+
+uint8_t outint = 1;
+uint8_t buzint = 1;
 
 #define SHELL_WA_SIZE   THD_WORKING_AREA_SIZE(2048)
 static const ShellConfig shell_cfg = {
@@ -67,7 +68,7 @@ static const ShellConfig shell_cfg = {
 #if USE_IWDG
 static const WDGConfig wdgcfg = {
 	STM32_IWDG_PR_64,
-	STM32_IWDG_RL(2000),
+	STM32_IWDG_RL(3000),
 };
 #endif
 
@@ -109,70 +110,61 @@ static THD_FUNCTION(ScanThread, arg) {
 		systime_t time = chVTGetSystemTimeX();
 		time += SCANINT;
 		// read sensors
-		co2_state = UNKNOWN;
-		mhz19.co2 = 0;
 		if (system_config.config.data.co2_en == 1 && !mhz19_pwrup.active) {
-			mhz19.state = mhz19_read(&mhz19.co2);
-			if (mhz19.state == MHZ19_OK) {
+			uint16_t co2;
+			mhz19.error = mhz19_read(&co2);
+			chBSemWait(&updsem);
+			mhz19.state = UNKNOWN;
+			mhz19.co2 = 0;
+			if (mhz19.error == MHZ19_OK) {
+				mhz19.co2 = co2;
 				if (mhz19.co2 > system_config.co2warn)
-					co2_state = WARNING;
+					mhz19.state = WARNING;
 				if (mhz19.co2 > system_config.co2crit)
-					co2_state = CRITICAL;
-				if (co2_state == UNKNOWN)
-					co2_state = OK;
+					mhz19.state = CRITICAL;
+				if (mhz19.state == UNKNOWN)
+					mhz19.state = OK;
 			}
+			chBSemSignal(&updsem);
 		}
-		temp_state = UNKNOWN;
-		hum_state = UNKNOWN;
-		dht.temperature = 0;
-		dht.humidity = 0;
+
 		if (system_config.config.data.dht_temp_en == 1 || system_config.config.data.dht_hum_en == 1) {
-			dht.state = dht_read(&dht.temperature, &dht.humidity);
-			if (dht.state == DHT_OK && system_config.config.data.dht_temp_en == 1) {
+			int16_t temperature;
+			uint16_t humidity;
+			dht.error = dht_read(&temperature, &humidity);
+			chBSemWait(&updsem);
+			dht.temp_state = UNKNOWN;
+			dht.temperature = 0;
+			if (dht.error == DHT_OK && system_config.config.data.dht_temp_en == 1) {
+				dht.temperature = temperature;
 				if (dht.temperature < system_config.templow.data.warn * 10 || dht.temperature > system_config.temphigh.data.warn * 10)
-					temp_state = WARNING;
+					dht.temp_state = WARNING;
 				if (dht.temperature < system_config.templow.data.crit * 10 || dht.temperature > system_config.temphigh.data.crit * 10)
-					temp_state = CRITICAL;
-				if (temp_state == UNKNOWN)
-					temp_state = OK;
+					dht.temp_state = CRITICAL;
+				if (dht.temp_state == UNKNOWN)
+					dht.temp_state = OK;
 			}
-			if (dht.state == DHT_OK && system_config.config.data.dht_hum_en == 1) {
+			dht.hum_state = UNKNOWN;
+			dht.humidity = 0;
+			if (dht.error == DHT_OK && system_config.config.data.dht_hum_en == 1) {
+				dht.humidity = humidity;
 				if (dht.humidity < system_config.humlow.data.warn * 10 || dht.humidity > system_config.humhigh.data.warn * 10)
-					hum_state = WARNING;
+					dht.hum_state = WARNING;
 				if (dht.humidity < system_config.humlow.data.crit * 10 || dht.humidity > system_config.humhigh.data.crit * 10)
-					hum_state = CRITICAL;
-				if (hum_state == UNKNOWN)
-					hum_state = OK;
+					dht.hum_state = CRITICAL;
+				if (dht.hum_state == UNKNOWN)
+					dht.hum_state = OK;
 			}
+			chBSemSignal(&updsem);
 		}
-		lcd_co2(mhz19.co2);
-		lcd_temperature(dht.temperature);
-		lcd_humidity(dht.humidity);
-		if (system_config.config.data.output_en == 1 && SDU1.config->usbp->state == USB_ACTIVE) {
-			char stemp[5] = "0.0", shum[5] = "0.0";
-			if (system_config.config.data.dht_temp_en == 1)
-				sprintf(stemp, "%2.1f", (float) dht.temperature / 10);
-			if (system_config.config.data.dht_hum_en == 1)
-				sprintf(shum, "%2.1f", (float) dht.humidity / 10);
-			char buf[24];
-			sprintf(buf, "#%d;%d;%d;%s;%d;%s\r\n",
-					co2_state, system_config.config.data.co2_en == 1 ? mhz19.co2 : 0,
-					temp_state, stemp,
-					hum_state, shum
-					);
-			chnWriteTimeout(&SDU1, (void *)buf, strlen(buf), MS2ST(USB_WRITE_MS));
-		}
+
 		if (system_config.config.data.redled_en == 1) {
-			if (co2_state == CRITICAL || temp_state == CRITICAL || hum_state == CRITICAL)
+			if (mhz19.state == CRITICAL || dht.temp_state == CRITICAL || dht.hum_state == CRITICAL)
 				led = CRITICAL;
-			else if (co2_state == WARNING || temp_state == WARNING || hum_state == WARNING)
+			else if (mhz19.state == WARNING || dht.temp_state == WARNING || dht.hum_state == WARNING)
 				led = WARNING;
 			else
 				led = OK;
-		}
-		if (system_config.config.data.buzzer_en == 1) {
-			if (co2_state == CRITICAL || temp_state == CRITICAL || hum_state == CRITICAL)
-				buzzer_on(NOTE_ALT, true);
 		}
 		chThdSleepUntil(time);
 	} //while
@@ -225,6 +217,8 @@ int main(void) {
   // PA15 used by TIM2 CH1
   AFIO->MAPR |= AFIO_MAPR_SWJ_CFG_JTAGDISABLE;
 
+  chBSemObjectInit(&updsem, FALSE);
+
   buzzer_init();
   dht_init();
   mhz19_init();
@@ -244,6 +238,10 @@ int main(void) {
   usbConnectBus(serusbcfg.usbp);
 
   lcd_prepare();
+
+  mhz19.state = UNKNOWN;
+  dht.temp_state = UNKNOWN;
+  dht.hum_state = UNKNOWN;
 
   // Creates LED thread.
   chThdCreateStatic(waLEDThread, sizeof(waLEDThread), LEDPRIO, LEDThread, NULL);
@@ -284,8 +282,40 @@ int main(void) {
 	if (mhz19_pwrup.active && --mhz19_pwrup.delay == 0)
 		mhz19_pwrup.active = false;
 
+	if (system_config.config.data.buzzer_en == 1) {
+		chBSemWait(&updsem);
+		if (mhz19.state == CRITICAL || dht.temp_state == CRITICAL || dht.hum_state == CRITICAL) {
+			if (--buzint == 0) {
+				buzzer_on(NOTE_ALT, true);
+				buzint = system_config.timeint.data.buzint;
+			}
+		}
+		chBSemSignal(&updsem);
+	}
+
+	if (system_config.config.data.output_en == 1 && SDU1.config->usbp->state == USB_ACTIVE) {
+		chBSemWait(&updsem);
+		if (--outint == 0) {
+			char stemp[5] = "0.0", shum[5] = "0.0";
+			if (system_config.config.data.dht_temp_en == 1)
+				sprintf(stemp, "%2.1f", (float) dht.temperature / 10);
+			if (system_config.config.data.dht_hum_en == 1)
+				sprintf(shum, "%2.1f", (float) dht.humidity / 10);
+			char buf[24];
+			sprintf(buf, "#%d;%d;%d;%s;%d;%s\r\n",
+					mhz19.state, system_config.config.data.co2_en == 1 ? mhz19.co2 : 0,
+					dht.temp_state, stemp,
+					dht.hum_state, shum
+					);
+			chnWriteTimeout(&SDU1, (void *)buf, strlen(buf), MS2ST(USB_WRITE_MS));
+			outint = system_config.timeint.data.outint;
+		}
+		chBSemSignal(&updsem);
+	}
+
+	chBSemWait(&updsem);
     lcd_update();
-    color_critical = !color_critical;
+	chBSemSignal(&updsem);
 
     chThdSleepUntil(time);
   }

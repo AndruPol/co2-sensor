@@ -12,13 +12,6 @@ typedef enum {
 	DHT_CHECKSUM_ERROR,
 } dht_error_t;
 
-typedef struct _dht_sensor_t dht_sensor_t;
-struct _dht_sensor_t {
-	dht_error_t state;	/* признак ошибки */
-	int16_t temperature;	/* temperature*10 */
-	uint16_t humidity;		/* humidity*10 */
-};
-
 
 #ifdef __cplusplus
 extern "C" {

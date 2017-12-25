@@ -14,8 +14,6 @@
 #include "util/printfs.h"
 
 static bool blink = false;
-static binary_semaphore_t lcd_upd;
-
 SSD1306_COLOR_t color_critical;
 
 void lcd_init(void) {
@@ -23,9 +21,7 @@ void lcd_init(void) {
 
 	SSD1306_Init();
 	SSD1306_On();
-	chBSemObjectInit(&lcd_upd, FALSE);
 
-	chBSemWait(&lcd_upd);
 	SSD1306_Fill(SSD1306_COLOR_BLACK);
 	SSD1306_GotoXY(0, 16);
 	sprintf(line, "CO2 meter v%s", FIRMWARE);
@@ -34,14 +30,12 @@ void lcd_init(void) {
 	sprintf(line, "made by @ndru");
 	SSD1306_Puts(line, &Font8x13, SSD1306_COLOR_WHITE);
 	SSD1306_Refresh();
-	chBSemSignal(&lcd_upd);
 }
 
 void lcd_prepare(void) {
 	SSD1306_Off();
 	color_critical = SSD1306_COLOR_WHITE;
 	if (system_config.config.data.screen_en == 1) {
-		chBSemWait(&lcd_upd);
 		SSD1306_Fill(SSD1306_COLOR_BLACK);
 		//	SSD1306_DrawLine(0, 14, 127, 14, SSD1306_COLOR_WHITE);
 		SSD1306_DrawRectangle(0, 16, 128, 28, SSD1306_COLOR_WHITE);
@@ -49,11 +43,10 @@ void lcd_prepare(void) {
 		SSD1306_DrawRectangle(64, 44, 64, 20, SSD1306_COLOR_WHITE);
 		SSD1306_On();
 		SSD1306_Refresh();
-		chBSemSignal(&lcd_upd);
 	}
 }
 
-void lcd_temperature(const int temp) {
+void lcd_temperature(void) {
 	SSD1306_COLOR_t color;
 	char stemp[5] = "    ";
 
@@ -61,10 +54,10 @@ void lcd_temperature(const int temp) {
 		return;
 
 	// '~' - replaced to degree Celsius character in Font10x17
-	if (temp_state != UNKNOWN) {
-		sprintf(stemp, "%2.1f~", (float) temp / 10);
+	if (dht.temp_state != UNKNOWN) {
+		sprintf(stemp, "%2.1f~", (float) dht.temperature / 10);
 	}
-	switch (temp_state) {
+	switch (dht.temp_state) {
 	case UNKNOWN:
 		color = SSD1306_COLOR_WHITE;
 		break;
@@ -78,25 +71,23 @@ void lcd_temperature(const int temp) {
 		color = SSD1306_COLOR_BLACK;
 		break;
 	}
-	chBSemWait(&lcd_upd);
 	SSD1306_DrawFilledRectangle(1, 45, 62, 18, !color);
 	SSD1306_DrawRectangle(0, 44, 64, 20, color);
 	SSD1306_GotoXY(8, 46);
 	SSD1306_Puts(stemp, &Font10x17, color);
-	chBSemSignal(&lcd_upd);
 }
 
-void lcd_humidity(const int hum) {
+void lcd_humidity(void) {
 	SSD1306_COLOR_t color;
 	char shum[5] = "    ";
 
 	if (system_config.config.data.screen_en == 0)
 		return;
 
-	if (hum_state != UNKNOWN) {
-		sprintf(shum, "%2.1f%%", (float) hum / 10);
+	if (dht.hum_state != UNKNOWN) {
+		sprintf(shum, "%2.1f%%", (float) dht.humidity / 10);
 	}
-	switch (hum_state) {
+	switch (dht.hum_state) {
 	case UNKNOWN:
 		color = SSD1306_COLOR_WHITE;
 		break;
@@ -110,25 +101,23 @@ void lcd_humidity(const int hum) {
 		color = SSD1306_COLOR_BLACK;
 		break;
 	}
-	chBSemWait(&lcd_upd);
 	SSD1306_DrawFilledRectangle(65, 45, 62, 18, !color);
 	SSD1306_DrawRectangle(64, 44, 64, 20, color);
 	SSD1306_GotoXY(72, 46);
 	SSD1306_Puts(shum, &Font10x17, color);
-	chBSemSignal(&lcd_upd);
 }
 
-void lcd_co2(const uint16_t co2) {
+void lcd_co2(void) {
 	SSD1306_COLOR_t color;
 	char sco2[5] = "    ";
 
 	if (system_config.config.data.screen_en == 0)
 		return;
 
-	if (co2_state != UNKNOWN) {
-		sprintf(sco2, "%4d", co2);
+	if (mhz19.state != UNKNOWN) {
+		sprintf(sco2, "%4d", mhz19.co2);
 	}
-	switch (co2_state) {
+	switch (mhz19.state) {
 	case UNKNOWN:
 		color = SSD1306_COLOR_WHITE;
 		break;
@@ -142,25 +131,22 @@ void lcd_co2(const uint16_t co2) {
 		color = SSD1306_COLOR_BLACK;
 		break;
 	}
-	chBSemWait(&lcd_upd);
 	SSD1306_DrawFilledRectangle(1, 17, 126, 26, !color);
 	SSD1306_DrawRectangle(0, 16, 128, 28, color);
 	if (!mhz19_pwrup.active) {
 		SSD1306_GotoXY(20, 18);
 		SSD1306_Puts(sco2, &Font16x24, color);
-		if (co2_state != UNKNOWN) {
+		if (mhz19.state != UNKNOWN) {
 			SSD1306_GotoXY(90, 18);
 			SSD1306_Puts("ppm", &Font10x17, color);
 		}
 	}
-	chBSemSignal(&lcd_upd);
 }
 
 void lcd_update(void) {
 	if (system_config.config.data.screen_en == 0)
 		return;
 
-	chBSemWait(&lcd_upd);
 	SSD1306_DrawFilledRectangle(0, 0, 128, 15, SSD1306_COLOR_BLACK);
 	SSD1306_GotoXY(0, 1);
 	if (system_config.config.data.co2_en)
@@ -209,8 +195,12 @@ void lcd_update(void) {
 		SSD1306_GotoXY(12, 26);
 		SSD1306_Puts("pls wait..", &Font8x13, SSD1306_COLOR_WHITE);
 		SSD1306_Puts(s, &Font8x13, SSD1306_COLOR_WHITE);
+	} else {
+		lcd_co2();
 	}
+	lcd_temperature();
+	lcd_humidity();
 
+    color_critical = !color_critical;
 	SSD1306_Refresh();
-	chBSemSignal(&lcd_upd);
 }
