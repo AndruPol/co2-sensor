@@ -1,6 +1,8 @@
 ## CO2, temperature, humidity sensor
 CO2, temperature, humidity sensor with OLED on STM32F103 w ChibiOS/RT
 
+Fonts created with great program http://www.riuson.com/lcd-image-converter
+
 * Display CO2 (MH-Z19), temperature, humidity (DHT22) values on OLED LCD 0.96" 128x64 SSD1306 SPI version
 * Send values to PC via serial over USB
 * LED warning/critical status
